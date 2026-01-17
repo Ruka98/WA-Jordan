@@ -197,7 +197,7 @@ class UIPages:
 
         return row
 
-    def create_header(self, title_text="Customized Water Accounting Tool For Jordan"):
+    def create_header(self, title_text="Customized WA+ Tool for Jordan"):
         """Create consistent header with IWMI and SIWA logos and title"""
         header_widget = QWidget()
         header_layout = QHBoxLayout()
@@ -520,7 +520,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         main_layout.setSpacing(0)
 
         # Header
-        header = self.create_header("Customized Water Accounting Tool For Jordan")
+        header = self.create_header("Customized WA+ Tool for Jordan")
         header.setFixedHeight(150)
         main_layout.addWidget(header)
 
@@ -537,7 +537,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         content_layout.setSpacing(25)
 
         # Title
-        welcome_title = QLabel("Welcome to Customized Water Accounting Tool For Jordan")
+        welcome_title = QLabel("Welcome to Customized WA+ Tool for Jordan")
         welcome_title.setStyleSheet("""
             QLabel {
                 font-size: 34px;
@@ -664,7 +664,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(20, 20, 20, 20)
 
-        main_layout.addWidget(self.create_header("Customized Water Accounting Tool For Jordan"))
+        main_layout.addWidget(self.create_header("Customized WA+ Tool for Jordan"))
 
         # Content layout
         content_layout = QVBoxLayout()
@@ -706,7 +706,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         btn_layout = QVBoxLayout()
         btn_layout.setSpacing(20)
 
-        full_btn = QPushButton("Full Water Accounting (Run fully Until Generate sheets)")
+        full_btn = QPushButton("Full Water Accounting (Run All Steps)")
         full_btn.setToolTip("Complete workflow from NetCDF creation to final water accounting sheets")
         full_btn.setMinimumSize(300, 60)
         full_btn.clicked.connect(lambda: self.start_workflow("full"))
