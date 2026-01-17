@@ -197,7 +197,7 @@ class UIPages:
 
         return row
 
-    def create_header(self, title_text="Water Accounting Tool"):
+    def create_header(self, title_text="Customized Water Accounting Tool For Jordan"):
         """Create consistent header with IWMI and SIWA logos and title"""
         header_widget = QWidget()
         header_layout = QHBoxLayout()
@@ -520,7 +520,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         main_layout.setSpacing(0)
 
         # Header
-        header = self.create_header("Water Accounting Plus Tool")
+        header = self.create_header("Customized Water Accounting Tool For Jordan")
         header.setFixedHeight(150)
         main_layout.addWidget(header)
 
@@ -537,7 +537,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         content_layout.setSpacing(25)
 
         # Title
-        welcome_title = QLabel("Welcome to Water Accounting Plus Tool")
+        welcome_title = QLabel("Welcome to Customized Water Accounting Tool For Jordan")
         welcome_title.setStyleSheet("""
             QLabel {
                 font-size: 34px;
@@ -664,21 +664,11 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(20, 20, 20, 20)
 
-        main_layout.addWidget(self.create_header("Water Accounting Plus Tool"))
-
-        welcome_title = QLabel("Select Analysis Module")
-        welcome_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #81C784; margin-top: 20px;")
-        welcome_title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(welcome_title)
+        main_layout.addWidget(self.create_header("Customized Water Accounting Tool For Jordan"))
 
         # Content layout
         content_layout = QVBoxLayout()
 
-        # Description
-        desc = QLabel("Please select the type of analysis you want to perform:")
-        desc.setAlignment(Qt.AlignCenter)
-        content_layout.addWidget(desc)
-        
         # Working directory selection
         work_dir_row = QHBoxLayout()
         work_dir_row.addWidget(QLabel("Working Directory:"))
@@ -702,11 +692,21 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             self.basin_name_entry.setText(self.selected_basin_name)
         content_layout.addLayout(basin_row)
 
+        welcome_title = QLabel("Select Analysis Module")
+        welcome_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #81C784; margin-top: 20px;")
+        welcome_title.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(welcome_title)
+
+        # Description
+        desc = QLabel("Please select the type of analysis you want to perform:")
+        desc.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(desc)
+
         # Module buttons
         btn_layout = QVBoxLayout()
         btn_layout.setSpacing(20)
 
-        full_btn = QPushButton("Full Water Accounting")
+        full_btn = QPushButton("Full Water Accounting (Run fully Until Generate sheets)")
         full_btn.setToolTip("Complete workflow from NetCDF creation to final water accounting sheets")
         full_btn.setMinimumSize(300, 60)
         full_btn.clicked.connect(lambda: self.start_workflow("full"))
@@ -725,7 +725,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             }
         """)
         
-        netcdf_btn = QPushButton("Create NetCDF")
+        netcdf_btn = QPushButton("1. Create NetCDF")
         netcdf_btn.setToolTip("Create NetCDF files from TIFFs only")
         netcdf_btn.setMinimumSize(300, 60)
         netcdf_btn.clicked.connect(lambda: self.start_workflow("netcdf"))
@@ -744,7 +744,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             }
         """)
         
-        sm_btn = QPushButton("Soil Moisture Balance")
+        sm_btn = QPushButton("2. Soil Moisture Balance")
         sm_btn.setToolTip("Calculate soil moisture balance only")
         sm_btn.setMinimumSize(300, 60)
         sm_btn.clicked.connect(lambda: self.start_workflow("smbalance"))
@@ -763,7 +763,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             }
         """)
         
-        hydro_btn = QPushButton("Hydroloop Simulation")
+        hydro_btn = QPushButton("3. Hydroloop Simulation")
         hydro_btn.setToolTip("Perform hydroloop calculations only")
         hydro_btn.setMinimumSize(300, 60)
         hydro_btn.clicked.connect(lambda: self.start_workflow("hydroloop"))
