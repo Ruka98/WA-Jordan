@@ -1,0 +1,41 @@
+Water Accounting Plus (WA+) Tool License
+
+Copyright © 2025, International Water Management Institute (IWMI), Water Accounting Team
+All rights reserved.
+
+The Water Accounting Plus (WA+) Tool has been developed by the Water Accounting Team at the International Water Management Institute (IWMI).
+It is made available as a research and capacity development tool to support sustainable water management.
+
+----------------------------------------------------------------------
+License Terms
+
+This software and its associated documentation are licensed under the
+Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+You are free to:
+  - Share — copy and redistribute the material in any medium or format
+  - Adapt — remix, transform, and build upon the material for any purpose, including commercial use
+
+Under the following terms:
+  - Attribution — You must give appropriate credit, cite the WA+ Tool and IWMI, and indicate if changes were made.
+    Attribution should not suggest that IWMI endorses you or your use.
+  - No additional restrictions — You may not apply legal terms or technological measures that legally restrict others from doing anything the license permits.
+
+----------------------------------------------------------------------
+Citation & Acknowledgement
+
+If you use this tool or its outputs in research, capacity development, or publications, please cite as:
+
+"Water Accounting Plus (WA+) Tool. Developed by the Water Accounting Team,
+International Water Management Institute (IWMI). Licensed under CC BY 4.0."
+
+In addition, any formal **publication, report, or public dissemination** that makes use of WA+ outputs
+should obtain prior written permission from the International Water Management Institute (IWMI).
+This ensures correct attribution, scientific integrity, and alignment with IWMI’s research standards.
+
+----------------------------------------------------------------------
+Disclaimer
+
+This tool is provided "as is", without warranty of any kind, express or implied.
+The International Water Management Institute (IWMI) and its partners accept no responsibility
+for any loss, damage, or misinterpretation resulting from the use of the WA+ Tool.
