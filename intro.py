@@ -28,7 +28,7 @@ class IntroWindow(QMainWindow):
         layout = QVBoxLayout()
 
         # Title
-        title = QLabel("Customized Water Accounting Plus Tool for Jordan")
+        title = QLabel("Customized WA+ Tool for Jordan")
         title.setFont(QFont("Arial", 20, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color:#2E86C1; margin-bottom: 16px;")
