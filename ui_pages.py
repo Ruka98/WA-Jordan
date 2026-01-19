@@ -537,7 +537,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         content_layout.setSpacing(25)
 
         # Title
-        welcome_title = QLabel("Welcome to Customized WA+ Tool for Jordan")
+        welcome_title = QLabel("Water Efficiency Conservation Project")
         welcome_title.setStyleSheet("""
             QLabel {
                 font-size: 34px;
@@ -629,6 +629,33 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
 
         content_layout.addWidget(button_container, alignment=Qt.AlignCenter)
         content_layout.addStretch()
+
+        # Logos container
+        logos_container = QWidget()
+        logos_layout = QHBoxLayout()
+        logos_layout.setContentsMargins(0, 0, 0, 0)
+        logos_layout.setSpacing(20)
+
+        # US Embassy Logo
+        us_label = QLabel()
+        us_path = self.resource_path(os.path.join("resources", "us_embassy.png"))
+        if os.path.exists(us_path):
+            us_pixmap = QPixmap(us_path).scaledToHeight(80, Qt.SmoothTransformation)
+            us_label.setPixmap(us_pixmap)
+        logos_layout.addWidget(us_label)
+
+        # Partner Logo
+        partner_label = QLabel()
+        partner_path = self.resource_path(os.path.join("resources", "partner_logo.png"))
+        if os.path.exists(partner_path):
+            partner_pixmap = QPixmap(partner_path).scaledToHeight(80, Qt.SmoothTransformation)
+            partner_label.setPixmap(partner_pixmap)
+        logos_layout.addWidget(partner_label)
+
+        logos_layout.addStretch()
+        logos_container.setLayout(logos_layout)
+
+        content_layout.addWidget(logos_container)
 
         content_widget.setLayout(content_layout)
         main_layout.addWidget(content_widget)
