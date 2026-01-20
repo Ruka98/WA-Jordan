@@ -198,47 +198,59 @@ class UIPages:
         return row
 
     def create_header(self, title_text="Customized WA+ Tool for Jordan"):
-        """Create consistent header with IWMI and SIWA logos and title"""
+        """Create consistent header with logos and title"""
         header_widget = QWidget()
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(10, 10, 10, 10)
-        header_layout.setSpacing(20)  # Add some spacing between elements
+        header_layout.setSpacing(10)
 
-        # IWMI Logo
-        iwmi_label = QLabel()
-        iwmi_path = self.resource_path(os.path.join("resources", "iwmi.png"))
-        if os.path.exists(iwmi_path):
-            iwmi_pixmap = QPixmap(iwmi_path).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            iwmi_label.setPixmap(iwmi_pixmap)
-        iwmi_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        header_layout.addWidget(iwmi_label)
+        # Left Logos Container
+        logos_left = QWidget()
+        logos_left_layout = QHBoxLayout()
+        logos_left_layout.setContentsMargins(0, 0, 0, 0)
+        logos_left_layout.setSpacing(15)
 
-        # Title Container
+        # Define logos for the left side: IWMI, Partner, CGIAR (logo1.png), US Embassy
+        logo_files = ["iwmi.png", "partner_logo.png", "logo1.png", "us_embassy.png"]
+
+        for logo_file in logo_files:
+            lbl = QLabel()
+            path = self.resource_path(os.path.join("resources", logo_file))
+            if os.path.exists(path):
+                # Scale nicely to fit within header height
+                pix = QPixmap(path).scaledToHeight(70, Qt.SmoothTransformation)
+                lbl.setPixmap(pix)
+            lbl.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            logos_left_layout.addWidget(lbl)
+
+        logos_left.setLayout(logos_left_layout)
+        header_layout.addWidget(logos_left)
+
+        # Title Container (Center)
         title_container = QWidget()
         title_container_layout = QVBoxLayout()
-        title_container_layout.setContentsMargins(0, 0, 0, 0)
+        title_container_layout.setContentsMargins(10, 0, 10, 0)
         
         # Main Title
         title = QLabel(title_text)
-        title.setStyleSheet("font-size: 30px; font-weight: bold; color: #4FC3F7;")
+        title.setStyleSheet("font-size: 26px; font-weight: bold; color: #4FC3F7;")
         title.setAlignment(Qt.AlignCenter)
         title_container_layout.addWidget(title)
         
-        # Optional Subtitle (only for intro page)
         if title_text == "WA+ Water Accounting Tool":
             subtitle = QLabel("Comprehensive Hydrological Analysis Solution")
-            subtitle.setStyleSheet("font-size: 16px; color: #BDBDBD;")
+            subtitle.setStyleSheet("font-size: 14px; color: #BDBDBD;")
             subtitle.setAlignment(Qt.AlignCenter)
             title_container_layout.addWidget(subtitle)
         
         title_container.setLayout(title_container_layout)
-        header_layout.addWidget(title_container, stretch=1)  # Allow title to expand
+        header_layout.addWidget(title_container, stretch=1)
 
-        # SIWA Logo
+        # SIWA Logo (Right)
         siwa_label = QLabel()
         siwa_path = self.resource_path(os.path.join("resources", "siwa.png"))
         if os.path.exists(siwa_path):
-            siwa_pixmap = QPixmap(siwa_path).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            siwa_pixmap = QPixmap(siwa_path).scaledToHeight(70, Qt.SmoothTransformation)
             siwa_label.setPixmap(siwa_pixmap)
         siwa_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         header_layout.addWidget(siwa_label)
@@ -247,9 +259,9 @@ class UIPages:
         header_widget.setStyleSheet("""
             background-color: #f5f5f5; 
             border-bottom: 1px solid #ddd;
-            padding: 10px;
+            padding: 5px;
         """)
-        header_widget.setFixedHeight(120)  # Fixed height for consistency
+        header_widget.setFixedHeight(110)
         return header_widget
 
     def create_footer(self):
@@ -537,7 +549,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         content_layout.setSpacing(25)
 
         # Title
-        welcome_title = QLabel("Welcome to Customized WA+ Tool for Jordan")
+        welcome_title = QLabel("Water Efficiency Conservation Project")
         welcome_title.setStyleSheet("""
             QLabel {
                 font-size: 34px;
@@ -629,6 +641,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
 
         content_layout.addWidget(button_container, alignment=Qt.AlignCenter)
         content_layout.addStretch()
+
 
         content_widget.setLayout(content_layout)
         main_layout.addWidget(content_widget)

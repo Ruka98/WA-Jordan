@@ -62,7 +62,7 @@ class WorkerThread(QThread):
 class MainWindow(QMainWindow, UIPages):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Hydrological Analysis Tool")
+        self.setWindowTitle("Water Accounting Analysis Tool")
         self.setGeometry(100, 100, 1200, 800)
         self.backend = Backend()
         self.basin_name_entry = None
