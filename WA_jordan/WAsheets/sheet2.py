@@ -177,8 +177,8 @@ def write_sheet2_row(LAND_USE, CLASS,
     for lu_type in lulcs:
         
         # Get some constants for the landuse type.
-        beneficial_percentages = np.array(lulc_dict[lu_type][3:6]) / 100
-        service_contributions = np.array(lulc_dict[lu_type][6:11]) / 100         
+        beneficial_percentages = np.array(lulc_dict[lu_type][4:7]) / 100
+        service_contributions = np.array(lulc_dict[lu_type][7:12]) / 100
           
         # Calculate the beneficial ET.
         benef_et = np.nansum([np.nansum(T[LULC == lu_type]) * beneficial_percentages[0],
