@@ -210,10 +210,10 @@ class UIPages:
         logos_left_layout.setContentsMargins(0, 0, 0, 0)
         logos_left_layout.setSpacing(15)
 
-        # Define logos for the left side: IWMI, Partner, CGIAR (logo1.png), US Embassy
-        logo_files = ["iwmi.png", "partner_logo.png", "logo1.png", "us_embassy.png"]
+        # Define logos for the left side: IWMI, Partner
+        logo_files_left = ["iwmi.png", "partner_logo.png"]
 
-        for logo_file in logo_files:
+        for logo_file in logo_files_left:
             lbl = QLabel()
             path = self.resource_path(os.path.join("resources", logo_file))
             if os.path.exists(path):
@@ -233,7 +233,7 @@ class UIPages:
         
         # Main Title
         title = QLabel(title_text)
-        title.setStyleSheet("font-size: 26px; font-weight: bold; color: #4FC3F7;")
+        title.setStyleSheet("font-size: 35px; font-weight: bold; color: #4FC3F7;")
         title.setAlignment(Qt.AlignCenter)
         title_container_layout.addWidget(title)
         
@@ -246,14 +246,27 @@ class UIPages:
         title_container.setLayout(title_container_layout)
         header_layout.addWidget(title_container, stretch=1)
 
-        # SIWA Logo (Right)
-        siwa_label = QLabel()
-        siwa_path = self.resource_path(os.path.join("resources", "siwa.png"))
-        if os.path.exists(siwa_path):
-            siwa_pixmap = QPixmap(siwa_path).scaledToHeight(70, Qt.SmoothTransformation)
-            siwa_label.setPixmap(siwa_pixmap)
-        siwa_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        header_layout.addWidget(siwa_label)
+        # Right Logos Container
+        logos_right = QWidget()
+        logos_right_layout = QHBoxLayout()
+        logos_right_layout.setContentsMargins(0, 0, 0, 0)
+        logos_right_layout.setSpacing(15)
+
+        # Define logos for the right side: US Embassy, SIWA
+        logo_files_right = ["us_embassy.png", "siwa.png"]
+
+        for logo_file in logo_files_right:
+            lbl = QLabel()
+            path = self.resource_path(os.path.join("resources", logo_file))
+            if os.path.exists(path):
+                # Scale nicely to fit within header height
+                pix = QPixmap(path).scaledToHeight(70, Qt.SmoothTransformation)
+                lbl.setPixmap(pix)
+            lbl.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            logos_right_layout.addWidget(lbl)
+
+        logos_right.setLayout(logos_right_layout)
+        header_layout.addWidget(logos_right)
 
         header_widget.setLayout(header_layout)
         header_widget.setStyleSheet("""
