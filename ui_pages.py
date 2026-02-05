@@ -743,6 +743,17 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         browse_ai_btn.setCursor(Qt.PointingHandCursor)
         ai_row.addWidget(browse_ai_btn)
 
+        # Auto-detect default model in resources
+        default_model_path = self.resource_path(os.path.join("resources", "wa_model.gguf"))
+        if os.path.exists(default_model_path):
+            self.ai_model_entry.setText(default_model_path)
+            if hasattr(self, 'ai_handler'):
+                success, msg = self.ai_handler.load_model(default_model_path)
+                if not success:
+                    print(f"Failed to auto-load default model: {msg}")
+        else:
+            self.ai_model_entry.setPlaceholderText("Select model or place 'wa_model.gguf' in resources/")
+
         content_layout.addLayout(ai_row)
 
         basin_row = QHBoxLayout()
