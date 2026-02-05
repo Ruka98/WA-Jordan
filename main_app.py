@@ -313,6 +313,28 @@ class MainWindow(QMainWindow, UIPages):
         ]
         self.show_actions(actions)
 
+    def clear_chat(self):
+        """Clear the chat history"""
+        # Remove all widgets from layout except the stretch at the end
+        while self.chat_layout.count() > 1: # The last item is the stretch
+            item = self.chat_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # If it's a layout (container), delete its children too just in case
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+
+        # Reset context but keep working dir and basin if set
+        preserved_context = {k: v for k, v in self.chat_context.items() if k in ['working_dir', 'basin_name', 'found_files']}
+        self.chat_context = preserved_context
+
+        # Re-initialize basic message
+        self.append_chat_message('bot', "Chat cleared. History has been reset.")
+        self.evaluate_workspace_status()
+
     def handle_user_input(self):
         """Handle text input from the user"""
         text = self.chat_input.text().strip()
@@ -322,31 +344,53 @@ class MainWindow(QMainWindow, UIPages):
         self.append_chat_message('user', text)
         self.chat_input.clear()
 
-        # Basic intent matching
         text_lower = text.lower()
 
+        # 1. Check for Clear Chat command
+        if "clear" in text_lower and "chat" in text_lower:
+            self.clear_chat()
+            return
+
+        # 2. Check for File Editing Intents (e.g., "change shapefile")
+        import re
+        edit_match = re.search(r'(?:change|edit|select)\s+(\w+)', text, re.IGNORECASE)
+        if edit_match:
+            target = edit_match.group(1).lower()
+            key_map = {
+                'shape': 'shapefile', 'shapefile': 'shapefile',
+                'mask': 'template_mask', 'template': 'template_mask',
+                'dem': 'dem_path', 'elevation': 'dem_path',
+                'population': 'population_path', 'pop': 'population_path',
+                'wpl': 'wpl_path', 'ewr': 'ewr_path',
+                'inflow': 'inflow', 'outflow': 'outflow',
+                'wastewater': 'tww', 'tww': 'tww',
+                'consumption': 'cw_do', 'netcdf': 'nc_dir', 'results': 'result_dir'
+            }
+            found_key = None
+            for k, v in key_map.items():
+                if k in target:
+                    found_key = v
+                    break
+
+            if found_key:
+                self.select_single_file_chat(found_key)
+                return
+
+        # 3. Check for specific commands
         if "select" in text_lower and "directory" in text_lower:
             self.handle_chat_action('select_working_dir', None)
-        elif "help" in text_lower:
-            self.append_chat_message('bot', "I can help you run the Water Accounting workflow. Start by selecting a working directory.")
-        elif any(kw in text_lower for kw in ["start", "yes", "create", "run"]):
-             if self.chat_state == 'WAITING_FOR_DIR':
-                 self.handle_chat_action('select_working_dir', None)
-             elif self.chat_state == 'READY':
-                 next_task = self.chat_context.get('next_task')
-                 if next_task:
-                     self.run_chat_task(next_task)
-                 else:
-                     self.append_chat_message('bot', "Please select an action from the buttons above.")
-             else:
-                 self.append_chat_message('bot', "I'm not sure what you want to start. Please check the current status.")
+            return
+
         elif "scan" in text_lower:
             if 'working_dir' in self.chat_context:
                 self.evaluate_workspace_status()
             else:
                 self.append_chat_message('bot', "Please select a working directory first.")
-        else:
-            self.append_chat_message('bot', "I didn't quite understand that. Please use the action buttons or standard commands like 'select directory' or 'scan'.")
+            return
+
+        # 4. Fallback to LLM Conversational Chat
+        response = self.ai_handler.chat(text, self.chat_context)
+        self.append_chat_message('bot', response)
 
     def handle_chat_action(self, action_id, data):
         """Handle button clicks from chat actions"""

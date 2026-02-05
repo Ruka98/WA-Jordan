@@ -2021,6 +2021,9 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         # Header
         main_layout.addWidget(self.create_header("AI Assistant"))
 
+        # Top Controls (Back + Clear)
+        controls_layout = QHBoxLayout()
+
         # Back button
         back_btn = QPushButton("Back")
         back_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
@@ -2037,7 +2040,28 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             }
         """)
         back_btn.setCursor(Qt.PointingHandCursor)
-        main_layout.addWidget(back_btn, alignment=Qt.AlignLeft)
+        controls_layout.addWidget(back_btn)
+
+        controls_layout.addStretch()
+
+        clear_btn = QPushButton("Clear Chat")
+        clear_btn.clicked.connect(lambda: self.clear_chat() if hasattr(self, 'clear_chat') else None)
+        clear_btn.setFixedSize(100, 40)
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: white;
+                color: #757575;
+                border-radius: 5px;
+                border: 1px solid #757575;
+            }
+            QPushButton:hover {
+                background-color: #EEEEEE;
+            }
+        """)
+        clear_btn.setCursor(Qt.PointingHandCursor)
+        controls_layout.addWidget(clear_btn)
+
+        main_layout.addLayout(controls_layout)
 
         # Chat Area
         self.chat_scroll = QScrollArea()
