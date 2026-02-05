@@ -48,3 +48,19 @@ dataset_config = {
         'attrs': {'units': 'None', 'source': 'L1_RET', 'quantity': 'ETref', 'temporal_resolution': 'monthly'}
     }
 }
+
+# Heuristic patterns for file detection
+# Key is the UI entry key, Value is a list of patterns to match (case-insensitive glob)
+file_patterns = {
+    'shapefile': ['*.shp'],
+    'template_mask': ['*template*.tif', '*mask*.tif', '*basin*.tif'],
+    'dem_path': ['*dem*.tif', '*elevation*.tif'],
+    'aeisw_path': ['*aeisw*.tif', '*actual*evap*.tif'],
+    'population_path': ['*pop*.tif', '*population*.tif'],
+    'wpl_path': ['*wpl*.tif'],
+    'ewr_path': ['*ewr*.*', '*environment*.*'],
+    'inflow': ['*inflow*.csv'],
+    'outflow': ['*outflow*.csv'],
+    'tww': ['*tww*.csv', '*waste*water*.csv'],
+    'cw_do': ['*cw_do*.csv', '*consumption*.csv', '*domestic*.csv']
+}

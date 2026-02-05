@@ -370,27 +370,44 @@ class UIPages:
             
             # Smart Scan / AI
             if hasattr(self, 'ai_handler'):
-                scan_result = self.ai_handler.scan_directory_heuristics(path)
-                found_input = scan_result.get('found_input_dir')
+                # Perform deep scan of workspace for all file types
+                scan_result = self.ai_handler.scan_workspace(path)
+                found_map = scan_result.get('found', {})
 
-                if found_input:
-                    # Auto-populate input directories
-                    if hasattr(self, 'netcdf_entries'):
-                        self.netcdf_entries['input_tifs'].setText(found_input)
-                    if hasattr(self, 'full_entries'):
-                        self.full_entries['input_tifs'].setText(found_input)
+                # Auto-populate all known fields across all pages
+                # Helper to safely set text if key exists
+                def safe_set(entries, key, value):
+                    if entries and key in entries:
+                        entries[key].setText(value)
 
-                    # Generate AI message
-                    msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
+                # 1. NetCDF / Full Inputs (Input Tifs)
+                if 'input_tifs' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'input_tifs', found_map['input_tifs'])
+                    safe_set(getattr(self, 'full_entries', {}), 'input_tifs', found_map['input_tifs'])
 
-                    # Show message
-                    QMessageBox.information(self, "AI Assistant", msg)
-                else:
-                    # Inform user about findings (or lack thereof)
-                    msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
-                    # Only show if explicit AI is loaded or if we want to guide the user regardless
-                    # The heuristic message is useful even without AI model
-                    QMessageBox.information(self, "AI Assistant", msg)
+                # 2. Shapefile & Templates
+                if 'shapefile' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'shapefile', found_map['shapefile'])
+                    safe_set(getattr(self, 'full_entries', {}), 'shapefile', found_map['shapefile'])
+
+                if 'template_mask' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'template_mask', found_map['template_mask'])
+                    safe_set(getattr(self, 'full_entries', {}), 'template_mask', found_map['template_mask'])
+                    safe_set(getattr(self, 'hydro_entries', {}), 'template_mask', found_map['template_mask'])
+
+                # 3. Hydroloop Files
+                hydro_keys = ['dem_path', 'aeisw_path', 'population_path', 'wpl_path',
+                              'ewr_path', 'inflow', 'outflow', 'tww', 'cw_do']
+                for hk in hydro_keys:
+                    if hk in found_map:
+                        safe_set(getattr(self, 'full_entries', {}), hk, found_map[hk])
+                        safe_set(getattr(self, 'hydro_entries', {}), hk, found_map[hk])
+
+                # Generate AI message summarizing the full scan
+                msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
+
+                # Show message
+                QMessageBox.information(self, "AI Assistant", msg)
 
     def browse_file(self, key, entries, file_filter):
         path, _ = QFileDialog.getOpenFileName(self, "Select File", "", file_filter)
@@ -731,30 +748,13 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         work_dir_row.addWidget(browse_work_btn)
         content_layout.addLayout(work_dir_row)
 
-        # AI Model Selection
-        ai_row = QHBoxLayout()
-        ai_row.addWidget(QLabel("AI Model (.gguf):"))
-        self.ai_model_entry = QLineEdit()
-        self.ai_model_entry.setPlaceholderText("Select .gguf model file for AI features")
-        ai_row.addWidget(self.ai_model_entry)
-
-        browse_ai_btn = QPushButton("Browse")
-        browse_ai_btn.clicked.connect(self.browse_ai_model)
-        browse_ai_btn.setCursor(Qt.PointingHandCursor)
-        ai_row.addWidget(browse_ai_btn)
-
-        # Auto-detect default model in resources
+        # Auto-detect default model in resources (Hidden from user as per request)
         default_model_path = self.resource_path(os.path.join("resources", "wa_model.gguf"))
         if os.path.exists(default_model_path):
-            self.ai_model_entry.setText(default_model_path)
             if hasattr(self, 'ai_handler'):
                 success, msg = self.ai_handler.load_model(default_model_path)
                 if not success:
                     print(f"Failed to auto-load default model: {msg}")
-        else:
-            self.ai_model_entry.setPlaceholderText("Select model or place 'wa_model.gguf' in resources/")
-
-        content_layout.addLayout(ai_row)
 
         basin_row = QHBoxLayout()
         basin_row.addWidget(QLabel("Basin Name:"))
