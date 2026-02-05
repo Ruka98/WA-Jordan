@@ -73,6 +73,10 @@ class MainWindow(QMainWindow, UIPages):
         self._syncing_netcdf_dir = False
         self.workflow_type = None  # Initialize workflow_type to avoid AttributeError
         
+        # Chat initialization
+        self.chat_state = 'INIT'
+        self.chat_context = {}
+
         # Set window icon (logo) using resource_path
         iwmi_path = self.resource_path(os.path.join("resources", "iwmi.png"))
         if os.path.exists(iwmi_path):
@@ -283,11 +287,265 @@ class MainWindow(QMainWindow, UIPages):
         self.create_smbalance_page()
         self.create_hydroloop_page()
         self.create_sheets_page()
+        self.create_chat_page()
         
         # Show intro page first
         self.stacked_widget.setCurrentIndex(0)
 
+        # Connect page change signal
+        self.stacked_widget.currentChanged.connect(self.on_page_changed)
+
         self.full_next_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(7))
+
+    def on_page_changed(self, index):
+        # Index 8 is Chat Page
+        if index == 8 and self.chat_state == 'INIT':
+            self.init_chat_logic()
+
+    def init_chat_logic(self):
+        """Initialize the chat session"""
+        self.chat_state = 'WAITING_FOR_DIR'
+        self.append_chat_message('bot', "Hello! I am your AI Assistant for Water Accounting.")
+        self.append_chat_message('bot', "To get started, please select your working directory containing your input data.")
+
+        actions = [
+            {'text': 'Select Working Directory', 'id': 'select_working_dir', 'data': None}
+        ]
+        self.show_actions(actions)
+
+    def handle_user_input(self):
+        """Handle text input from the user"""
+        text = self.chat_input.text().strip()
+        if not text:
+            return
+
+        self.append_chat_message('user', text)
+        self.chat_input.clear()
+
+        # Basic intent matching
+        text_lower = text.lower()
+
+        if "select" in text_lower and "directory" in text_lower:
+            self.handle_chat_action('select_working_dir', None)
+        elif "help" in text_lower:
+            self.append_chat_message('bot', "I can help you run the Water Accounting workflow. Start by selecting a working directory.")
+        elif "start" in text_lower:
+             if self.chat_state == 'WAITING_FOR_DIR':
+                 self.handle_chat_action('select_working_dir', None)
+             else:
+                 self.append_chat_message('bot', "We have already started. What would you like to do?")
+        elif "scan" in text_lower:
+            if 'working_dir' in self.chat_context:
+                self.evaluate_workspace_status()
+            else:
+                self.append_chat_message('bot', "Please select a working directory first.")
+        else:
+            self.append_chat_message('bot', "I didn't quite understand that. Please use the action buttons or standard commands like 'select directory' or 'scan'.")
+
+    def handle_chat_action(self, action_id, data):
+        """Handle button clicks from chat actions"""
+        if action_id == 'select_working_dir':
+            self.select_working_directory_chat()
+        elif action_id == 'select_input_tifs_dir':
+            self.select_input_tifs_dir_chat()
+        elif action_id == 'scan_workspace':
+            self.evaluate_workspace_status()
+        elif action_id.startswith('select_file_'):
+            self.select_single_file_chat(data)
+        elif action_id.startswith('run_task_'):
+            self.run_chat_task(action_id.replace('run_task_', ''))
+
+    def select_input_tifs_dir_chat(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Input TIFFs Directory", self.chat_context.get('working_dir', ''))
+        if path:
+            self.chat_context.setdefault('found_files', {})['input_tifs'] = path
+            self.append_chat_message('user', f"Selected Input TIFFs Directory: {path}")
+
+            # Update main UI entries
+            if hasattr(self, 'full_entries'):
+                 self.full_entries['input_tifs'].setText(path)
+            if hasattr(self, 'netcdf_entries'):
+                 self.netcdf_entries['input_tifs'].setText(path)
+
+            self.evaluate_workspace_status()
+
+    def select_working_directory_chat(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Working Directory")
+        if path:
+            self.chat_context['working_dir'] = path
+            self.append_chat_message('user', f"Selected directory: {path}")
+
+            # Sync with main app logic
+            self.working_dir_entry.setText(path)
+            netcdf_path = os.path.join(path, "NetCDF")
+            results_path = os.path.join(path, "Results")
+            os.makedirs(netcdf_path, exist_ok=True)
+            os.makedirs(results_path, exist_ok=True)
+            self.sync_netcdf_directory(netcdf_path, source='working_dir')
+
+            self.append_chat_message('bot', "Directory selected. Scanning for files...")
+            self.evaluate_workspace_status()
+
+    def select_single_file_chat(self, key):
+        filters = {
+            "shapefile": "Shapefile (*.shp)",
+            "template_mask": "GeoTIFF Files (*.tif *.tiff)",
+            "dem_path": "GeoTIFF Files (*.tif *.tiff)",
+            "population_path": "GeoTIFF Files (*.tif *.tiff)",
+            "aeisw_path": "GeoTIFF Files (*.tif *.tiff)",
+            "wpl_path": "GeoTIFF Files (*.tif *.tiff)",
+            "ewr_path": "All Files (*)",
+            "inflow": "CSV Files (*.csv)",
+            "outflow": "CSV Files (*.csv)",
+            "tww": "CSV Files (*.csv)",
+            "cw_do": "CSV Files (*.csv)"
+        }
+        f_filter = filters.get(key, "All Files (*)")
+        path, _ = QFileDialog.getOpenFileName(self, f"Select {key.replace('_', ' ').title()}", self.chat_context.get('working_dir', ''), f_filter)
+        if path:
+            self.chat_context.setdefault('found_files', {})[key] = path
+            self.append_chat_message('user', f"Selected {key}: {os.path.basename(path)}")
+
+            # Update main UI entries too
+            if hasattr(self, 'full_entries') and key in self.full_entries:
+                 if isinstance(self.full_entries[key], QLineEdit):
+                     self.full_entries[key].setText(path)
+
+            self.evaluate_workspace_status()
+
+    def run_chat_task(self, task_name):
+        self.append_chat_message('bot', f"Starting task: {task_name}...")
+        self.clear_actions()
+
+        if task_name == 'netcdf':
+            func = self.create_netcdf_full
+        elif task_name == 'rain':
+            func = self.calculate_rain_full
+        elif task_name == 'hydroloop':
+            self.run_chat_hydroloop_sequence()
+            return
+        else:
+            self.append_chat_message('bot', f"Unknown task: {task_name}")
+            return
+
+        self.chat_worker = WorkerThread(func, self.on_chat_task_progress)
+        self.chat_worker.result_signal.connect(lambda s, m: self.on_chat_task_complete(s, m, task_name))
+        self.chat_worker.start()
+
+    def on_chat_task_progress(self, current, total, message):
+        if message and message != getattr(self, '_last_chat_msg', ''):
+             self.append_chat_message('bot', f"Progress: {message}")
+             self._last_chat_msg = message
+
+    def on_chat_task_complete(self, success, messages, task_name):
+        if success:
+            self.append_chat_message('bot', f"Task '{task_name}' completed successfully.")
+            self.evaluate_workspace_status()
+        else:
+            self.append_chat_message('bot', f"Task '{task_name}' failed.")
+            if messages:
+                self.append_chat_message('bot', f"Error: {messages[-1]}")
+            # Re-evaluate to show options again (maybe retry)
+            self.evaluate_workspace_status()
+
+    def run_chat_hydroloop_sequence(self):
+        self.append_chat_message('bot', "Initializing Hydroloop...")
+
+        def on_init_complete(success, messages):
+            if not success:
+                self.on_chat_task_complete(False, messages, 'hydroloop_init')
+                return
+
+            self.append_chat_message('bot', "Hydroloop initialized. Running simulation...")
+            self.chat_worker = WorkerThread(self.run_hydroloop_full, self.on_chat_task_progress)
+            self.chat_worker.result_signal.connect(lambda s, m: self.on_chat_task_complete(s, m, 'hydroloop_run'))
+            self.chat_worker.start()
+
+        self.chat_worker = WorkerThread(self.init_hydroloop_full, self.on_chat_task_progress)
+        self.chat_worker.result_signal.connect(on_init_complete)
+        self.chat_worker.start()
+
+    def evaluate_workspace_status(self):
+        working_dir = self.chat_context.get('working_dir')
+        if not working_dir:
+            self.append_chat_message('bot', "No working directory selected.")
+            return
+
+        # Scan workspace
+        scan_result = self.ai_handler.scan_workspace(working_dir)
+        found = scan_result.get('found', {})
+        # Merge with manually selected files
+        if 'found_files' in self.chat_context:
+            found.update(self.chat_context['found_files'])
+
+        missing = scan_result.get('missing', [])
+        # Remove found from missing
+        missing = [m for m in missing if m not in found]
+
+        self.chat_context['found_files'] = found
+
+        # 1. Check Input TIFFs (Critical for NetCDF)
+        input_tifs = found.get('input_tifs')
+
+        # 2. Check Shapefile & Mask
+        shp = found.get('shapefile')
+        mask = found.get('template_mask')
+
+        # 3. Check for existing NetCDF files
+        netcdf_dir = os.path.join(working_dir, "NetCDF")
+        nc_files_exist = False
+        if os.path.exists(netcdf_dir):
+             nc_files = [f for f in os.listdir(netcdf_dir) if f.endswith('.nc')]
+             if len(nc_files) > 0:
+                 nc_files_exist = True
+
+        actions = []
+
+        # Scenario: Missing Inputs for NetCDF
+        missing_inputs = []
+        if not input_tifs: missing_inputs.append("Input TIFFs Directory")
+        if not shp: missing_inputs.append("Shapefile")
+        if not mask: missing_inputs.append("Template Mask")
+
+        if missing_inputs and not nc_files_exist:
+             self.append_chat_message('bot', f"I am missing some input files to create NetCDFs: {', '.join(missing_inputs)}.")
+
+             if not input_tifs:
+                 actions.append({'text': 'Select Input TIFFs Directory', 'id': 'select_input_tifs_dir', 'data': None})
+             if not shp:
+                 actions.append({'text': 'Select Shapefile', 'id': 'select_file_shapefile', 'data': 'shapefile'})
+             if not mask:
+                 actions.append({'text': 'Select Template Mask', 'id': 'select_file_template_mask', 'data': 'template_mask'})
+
+             self.show_actions(actions)
+             self.chat_state = 'MISSING_INPUTS'
+             return
+
+        # Scenario: Inputs Ready, NetCDF not created
+        if not nc_files_exist:
+            self.append_chat_message('bot', "I found all necessary inputs. We can start by creating the NetCDF files.")
+            actions.append({'text': 'Create NetCDF Files', 'id': 'run_task_netcdf', 'data': None})
+            self.show_actions(actions)
+            self.chat_state = 'READY_NETCDF'
+            return
+
+        # Scenario: NetCDFs Exist
+        self.append_chat_message('bot', "I found existing NetCDF files in the NetCDF directory.")
+
+        actions.append({'text': 'Run Rain Interception', 'id': 'run_task_rain', 'data': None})
+        actions.append({'text': 'Re-create NetCDF', 'id': 'run_task_netcdf', 'data': None})
+
+        # Check for Hydroloop inputs
+        hydro_missing = [k for k in ['dem_path', 'population_path'] if k not in found]
+        if not hydro_missing:
+             actions.append({'text': 'Run Full Hydroloop', 'id': 'run_task_hydroloop', 'data': None})
+        else:
+             self.append_chat_message('bot', "To run Hydroloop, I need additional files like DEM and Population.")
+             for key in hydro_missing:
+                 actions.append({'text': f'Select {key.replace("_", " ").title()}', 'id': f'select_file_{key}', 'data': key})
+
+        self.show_actions(actions)
+        self.chat_state = 'READY_NEXT'
 
     def resource_path(self, relative_path):
         """Get absolute path to resource, works for dev and for PyInstaller"""
