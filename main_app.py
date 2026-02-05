@@ -329,11 +329,17 @@ class MainWindow(QMainWindow, UIPages):
             self.handle_chat_action('select_working_dir', None)
         elif "help" in text_lower:
             self.append_chat_message('bot', "I can help you run the Water Accounting workflow. Start by selecting a working directory.")
-        elif "start" in text_lower:
+        elif any(kw in text_lower for kw in ["start", "yes", "create", "run"]):
              if self.chat_state == 'WAITING_FOR_DIR':
                  self.handle_chat_action('select_working_dir', None)
+             elif self.chat_state == 'READY':
+                 next_task = self.chat_context.get('next_task')
+                 if next_task:
+                     self.run_chat_task(next_task)
+                 else:
+                     self.append_chat_message('bot', "Please select an action from the buttons above.")
              else:
-                 self.append_chat_message('bot', "We have already started. What would you like to do?")
+                 self.append_chat_message('bot', "I'm not sure what you want to start. Please check the current status.")
         elif "scan" in text_lower:
             if 'working_dir' in self.chat_context:
                 self.evaluate_workspace_status()
@@ -521,6 +527,20 @@ class MainWindow(QMainWindow, UIPages):
         # Ensure discovered files are pushed to UI
         self.chat_context['found_files'] = found
 
+        # Sync found files to UI entries to ensure backend can see them
+        if hasattr(self, 'full_entries'):
+            for key, path in found.items():
+                if key in self.full_entries and isinstance(self.full_entries[key], QLineEdit):
+                    # Only update if empty to respect user edits
+                    if not self.full_entries[key].text():
+                        self.full_entries[key].setText(path)
+
+        if hasattr(self, 'netcdf_entries'):
+            for key, path in found.items():
+                if key in self.netcdf_entries and isinstance(self.netcdf_entries[key], QLineEdit):
+                    if not self.netcdf_entries[key].text():
+                        self.netcdf_entries[key].setText(path)
+
         # Check Basin Name
         basin_name = self.chat_context.get('basin_name')
         if not basin_name and self.basin_name_entry:
@@ -582,10 +602,15 @@ class MainWindow(QMainWindow, UIPages):
             if not nc_files_exist:
                 self.append_chat_message('bot', "All inputs for NetCDF creation are ready. Shall we start?")
                 actions.append({'text': 'Start NetCDF Creation', 'id': 'run_task_netcdf', 'data': None})
+                self.chat_context['next_task'] = 'netcdf'
             else:
                 self.append_chat_message('bot', "NetCDF files are ready. You can proceed to Rain Interception or re-create NetCDFs.")
                 actions.append({'text': 'Run Rain Interception', 'id': 'run_task_rain', 'data': None})
                 actions.append({'text': 'Re-create NetCDFs', 'id': 'run_task_netcdf', 'data': None})
+
+                # Default next task depends on whether Rain is done?
+                # For now assume Rain is next logical step if NetCDF exists
+                self.chat_context['next_task'] = 'rain'
 
                 # Check for Hydroloop
                 hydro_missing = []
@@ -600,6 +625,8 @@ class MainWindow(QMainWindow, UIPages):
                          actions.append({'text': f'Select {k.replace("_", " ").title()}', 'id': f'select_file_{k}', 'data': k})
                 else:
                     actions.append({'text': 'Run Hydroloop', 'id': 'run_task_hydroloop', 'data': None})
+                    # If everything is ready including Hydroloop inputs, maybe prompt for that too
+                    # But keeping 'rain' as default 'next' is safer sequence
 
         self.show_actions(actions)
         self.chat_state = 'READY'
