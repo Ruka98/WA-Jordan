@@ -316,3 +316,54 @@ class AIHandler:
         except Exception as e:
             self.logger.error(f"LLM Error: {e}")
             return response_text + " (AI generation failed)"
+
+    def chat(self, user_message, context_info=None):
+        """
+        Handle conversational chat with the user, incorporating tool context.
+        """
+        if not self.is_loaded():
+            return "I am running in limited mode because the AI model is not loaded. I can still help you with basic commands like 'select directory' or 'run netcdf', but I can't generate creative responses."
+
+        if context_info is None:
+            context_info = {}
+
+        # Construct System Prompt with Tool Knowledge
+        system_prompt = """You are Jules, an intelligent AI assistant for the Water Accounting Plus (WA+) Tool.
+Your goal is to help users run hydrological analysis workflows.
+
+The tool has the following workflow:
+1. Create NetCDF: Converts input TIFFs (P, ET, LAI, etc.) into NetCDF format.
+2. Rain Interception: Calculates interception and separates Green/Blue water.
+3. Soil Moisture Balance: Calculates soil moisture, percolation, and runoff.
+4. Hydroloop: Allocates water to different users.
+5. Generate Sheets: Creates the final WA+ reporting sheets.
+
+Code Structure:
+- Input data should be in a working directory with specific subfolders (P, ET, etc.).
+- 'main_app.py' is the main entry point.
+- 'ai_assistant.py' handles this logic.
+
+Instructions:
+- If the user asks to "create blue ET" or "green ET", explain that this happens during the 'Rain Interception' and 'Soil Moisture Balance' steps, and suggest running those.
+- If the user wants to "edit" or "change" a file, suggest they say "change shapefile" or "select shapefile".
+- Be concise, professional, and helpful.
+"""
+
+        # Context summary
+        ctx_str = ""
+        if 'working_dir' in context_info:
+            ctx_str += f"Current Working Directory: {context_info['working_dir']}\n"
+
+        found = context_info.get('found_files', {})
+        if found:
+            ctx_str += f"Found Files: {', '.join(found.keys())}\n"
+
+        full_prompt = f"System: {system_prompt}\nContext: {ctx_str}\nUser: {user_message}\nAssistant:"
+
+        try:
+            output = self.llm(full_prompt, max_tokens=200, stop=["User:", "System:"], echo=False)
+            response = output['choices'][0]['text'].strip()
+            return response
+        except Exception as e:
+            self.logger.error(f"Chat LLM Error: {e}")
+            return "I encountered an error generating a response. Please try again."
