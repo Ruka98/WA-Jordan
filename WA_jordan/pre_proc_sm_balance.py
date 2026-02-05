@@ -56,7 +56,64 @@ def rainy_days(dailyp_nc, monthlyp_nc):
     pbinary = xr.where(p > 0, 1, 0)  # Consider any precipitation above 0 as a rainy day
     
     # Resample the binary array to monthly frequency and sum to get the number of rainy days per month
-    nrainy = pbinary.resample(time='1M').sum(dim='time', skipna=False)
+    # Using groupby instead of resample to avoid pandas 2.2 incompatibility with older xarray
+    # nrainy = pbinary.resample(time='1M').sum(dim='time', skipna=False)
+
+    # Create a monthly identifier (YYYY-MM)
+    month_year = pbinary['time'].dt.strftime('%Y-%m')
+    # Assign it as a coordinate
+    pbinary = pbinary.assign_coords(month_year=month_year)
+    # Group by this new coordinate and sum
+    nrainy = pbinary.groupby('month_year').sum(dim='time', skipna=False)
+
+    # The result has 'month_year' as dimension. We need to restore 'time' dimension matching p_m
+    # We can assume the order aligns if sorted, or use reindexing logic more carefully.
+    # p_m is monthly precipitation. We want nrainy to have the same time coords.
+
+    # Map the 'month_year' strings back to the timestamps in p_m
+    # This assumes p_m has one entry per month and covers the same period
+
+    # Let's verify overlap
+    common_times = []
+
+    # If p_m.time is proper datetime, we can format it too
+    pm_months = p_m['time'].dt.strftime('%Y-%m')
+
+    # Reindex nrainy to align with p_m's months
+    nrainy = nrainy.rename({'month_year': 'time'}) # Temporary rename for alignment logic if needed, but indices are strings vs dates
+
+    # Actually, easiest is to assign the values of nrainy to a new DataArray shaped like p_m
+    # Create a mapping from month_year string to nrainy value
+
+    # Better approach: Reconstruct the time coordinate
+    # nrainy currently indexed by strings '2020-01', '2020-02'...
+
+    # Convert nrainy (indexed by string YYYY-MM) to use the timestamps from p_m that match
+
+    # Filter p_m to those present in nrainy
+    pm_valid = p_m.sel(time=p_m['time'].dt.strftime('%Y-%m').isin(nrainy['month_year']))
+
+    # We can try to just swap the coordinate if lengths match exactly, but safer to reindex
+    # However, since we are doing `nrainy.reindex(time = p_m.time, method = 'nearest')` later,
+    # we just need nrainy to have a time dimension with compatible timestamps.
+
+    # Let's build a new time index for nrainy based on the first day of the month string?
+    # Or simpler:
+    # 1. Group pbinary by YYYY-MM
+    # 2. Sum
+    # 3. Assign the time coordinate of the first occurrence in that group? Or just use p_m's time if aligned?
+
+    # Workaround: xarray resample failure is due to '1M'. '1MS' (Month Start) might work if supported, or 'ME'.
+    # But usually 'base' arg error is deep.
+
+    # Let's try '1MS' first? No, likely same code path.
+    # Manual groupby is safest.
+
+    # Recover timestamps: parse YYYY-MM string to datetime (1st of month)
+    # nrainy.month_year is the coordinate.
+
+    dates = pd.to_datetime(nrainy['month_year'].values)
+    nrainy = nrainy.assign_coords(time=dates).swap_dims({'month_year': 'time'}).drop('month_year')
 
     # Ensure the time coordinates of 'nrainy' and 'p_monthly' match
     nrainy = nrainy.reindex(time = p_m.time, method = 'nearest')  # or method='ffill', 'bfill', etc. as needed
@@ -100,7 +157,15 @@ def lai_to_monthly(lai_nc, lu_nc):
     """
     lai_8d, _ = open_nct(lai_nc)
     
-    lai_mo = lai_8d.resample(time='1M', label='left',loffset='D').median()
+    # lai_mo = lai_8d.resample(time='1M', label='left',loffset='D').median()
+    # Manual groupby to avoid compatibility issues
+    month_year = lai_8d['time'].dt.strftime('%Y-%m')
+    lai_8d = lai_8d.assign_coords(month_year=month_year)
+    lai_mo = lai_8d.groupby('month_year').median(dim='time')
+
+    # Recover time coordinate
+    dates = pd.to_datetime(lai_mo['month_year'].values)
+    lai_mo = lai_mo.assign_coords(time=dates).swap_dims({'month_year': 'time'}).drop('month_year')
     
     ### Write netCDF files
     root_f = os.path.dirname(lai_nc)
