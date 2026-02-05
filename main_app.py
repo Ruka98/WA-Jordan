@@ -8,7 +8,7 @@ from license_page import LicenseDialog
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QLineEdit, QPushButton, QFileDialog, QTextEdit, QProgressBar, 
                              QComboBox, QSpinBox, QMessageBox, QScrollArea, QStackedWidget, 
-                             QSizePolicy, QFrame, QStackedLayout, QDialog)  # ← add QDialog
+                             QSizePolicy, QFrame, QStackedLayout, QDialog, QInputDialog)  # ← add QDialog
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QFont
 try:
@@ -346,6 +346,8 @@ class MainWindow(QMainWindow, UIPages):
         """Handle button clicks from chat actions"""
         if action_id == 'select_working_dir':
             self.select_working_directory_chat()
+        elif action_id == 'enter_basin_name':
+            self.enter_basin_name_chat()
         elif action_id == 'select_input_tifs_dir':
             self.select_input_tifs_dir_chat()
         elif action_id == 'scan_workspace':
@@ -366,6 +368,19 @@ class MainWindow(QMainWindow, UIPages):
                  self.full_entries['input_tifs'].setText(path)
             if hasattr(self, 'netcdf_entries'):
                  self.netcdf_entries['input_tifs'].setText(path)
+
+            self.evaluate_workspace_status()
+
+    def enter_basin_name_chat(self):
+        text, ok = QInputDialog.getText(self, "Basin Name", "Enter Basin Name:")
+        if ok and text:
+            self.chat_context['basin_name'] = text
+            self.append_chat_message('user', f"Basin Name: {text}")
+
+            # Sync with main UI
+            if self.basin_name_entry:
+                self.basin_name_entry.setText(text)
+            self.sync_basin_name(text)
 
             self.evaluate_workspace_status()
 
@@ -417,15 +432,39 @@ class MainWindow(QMainWindow, UIPages):
         self.append_chat_message('bot', f"Starting task: {task_name}...")
         self.clear_actions()
 
+        # Validation before running
+        missing = []
         if task_name == 'netcdf':
+            if not self.full_entries['input_tifs'].text(): missing.append("Input TIFFs")
+            if not self.full_entries['shapefile'].text(): missing.append("Shapefile")
+            if not self.full_entries['template_mask'].text(): missing.append("Template Mask")
+            if not self._current_basin_name(): missing.append("Basin Name")
             func = self.create_netcdf_full
+
         elif task_name == 'rain':
+            if not self.full_entries['output_dir'].text(): missing.append("NetCDF Output Directory")
             func = self.calculate_rain_full
+
         elif task_name == 'hydroloop':
+            if not self.full_entries['nc_dir'].text(): missing.append("NetCDF Input Directory")
+            # Basic hydroloop checks
+            if not self.full_entries['dem_path'].text(): missing.append("DEM")
+            if not self.full_entries['population_path'].text(): missing.append("Population")
+
+            if missing:
+                self.append_chat_message('bot', f"Cannot start {task_name}. Missing: {', '.join(missing)}")
+                self.evaluate_workspace_status()
+                return
+
             self.run_chat_hydroloop_sequence()
             return
         else:
             self.append_chat_message('bot', f"Unknown task: {task_name}")
+            return
+
+        if missing:
+            self.append_chat_message('bot', f"Cannot start {task_name}. Missing: {', '.join(missing)}")
+            self.evaluate_workspace_status()
             return
 
         self.chat_worker = WorkerThread(func, self.on_chat_task_progress)
@@ -474,24 +513,22 @@ class MainWindow(QMainWindow, UIPages):
         # Scan workspace
         scan_result = self.ai_handler.scan_workspace(working_dir)
         found = scan_result.get('found', {})
+
         # Merge with manually selected files
         if 'found_files' in self.chat_context:
             found.update(self.chat_context['found_files'])
 
-        missing = scan_result.get('missing', [])
-        # Remove found from missing
-        missing = [m for m in missing if m not in found]
-
+        # Ensure discovered files are pushed to UI
         self.chat_context['found_files'] = found
 
-        # 1. Check Input TIFFs (Critical for NetCDF)
-        input_tifs = found.get('input_tifs')
+        # Check Basin Name
+        basin_name = self.chat_context.get('basin_name')
+        if not basin_name and self.basin_name_entry:
+            basin_name = self.basin_name_entry.text()
+            if basin_name:
+                self.chat_context['basin_name'] = basin_name
 
-        # 2. Check Shapefile & Mask
-        shp = found.get('shapefile')
-        mask = found.get('template_mask')
-
-        # 3. Check for existing NetCDF files
+        # Check for existing NetCDF files
         netcdf_dir = os.path.join(working_dir, "NetCDF")
         nc_files_exist = False
         if os.path.exists(netcdf_dir):
@@ -499,53 +536,73 @@ class MainWindow(QMainWindow, UIPages):
              if len(nc_files) > 0:
                  nc_files_exist = True
 
+        # Generate HTML Status Report
+        status_html = "<h3>Current Status Report</h3>"
+        status_html += "<table border='0' cellspacing='5' cellpadding='2'>"
+
+        # Section 1: Basic Setup
+        status_html += "<tr><td colspan='2'><b>1. Basic Setup</b></td></tr>"
+        status_html += f"<tr><td>Working Directory:</td><td>{'✅ Set' if working_dir else '❌ Missing'}</td></tr>"
+        status_html += f"<tr><td>Basin Name:</td><td>{'✅ ' + basin_name if basin_name else '❌ Missing'}</td></tr>"
+
+        # Section 2: NetCDF Inputs
+        input_tifs = found.get('input_tifs')
+        shp = found.get('shapefile')
+        mask = found.get('template_mask')
+
+        status_html += "<tr><td colspan='2'><b>2. NetCDF Creation Inputs</b></td></tr>"
+        status_html += f"<tr><td>Input TIFFs:</td><td>{'✅ Found' if input_tifs else '❌ Missing'}</td></tr>"
+        status_html += f"<tr><td>Shapefile:</td><td>{'✅ Found' if shp else '❌ Missing'}</td></tr>"
+        status_html += f"<tr><td>Template Mask:</td><td>{'✅ Found' if mask else '❌ Missing'}</td></tr>"
+
+        # Section 3: Outputs
+        status_html += "<tr><td colspan='2'><b>3. Process Outputs</b></td></tr>"
+        status_html += f"<tr><td>NetCDF Files:</td><td>{'✅ Available' if nc_files_exist else '⚠️ Not Created'}</td></tr>"
+
+        status_html += "</table>"
+        self.append_chat_message('bot', status_html)
+
+        # Generate Actions
         actions = []
 
-        # Scenario: Missing Inputs for NetCDF
-        missing_inputs = []
-        if not input_tifs: missing_inputs.append("Input TIFFs Directory")
-        if not shp: missing_inputs.append("Shapefile")
-        if not mask: missing_inputs.append("Template Mask")
+        # Priority 1: Basin Name
+        if not basin_name:
+            actions.append({'text': 'Enter Basin Name', 'id': 'enter_basin_name', 'data': None})
 
-        if missing_inputs and not nc_files_exist:
-             self.append_chat_message('bot', f"I am missing some input files to create NetCDFs: {', '.join(missing_inputs)}.")
+        # Priority 2: NetCDF Inputs
+        if not input_tifs:
+            actions.append({'text': 'Select Input TIFFs Directory', 'id': 'select_input_tifs_dir', 'data': None})
+        if not shp:
+            actions.append({'text': 'Select Shapefile', 'id': 'select_file_shapefile', 'data': 'shapefile'})
+        if not mask:
+            actions.append({'text': 'Select Template Mask', 'id': 'select_file_template_mask', 'data': 'template_mask'})
 
-             if not input_tifs:
-                 actions.append({'text': 'Select Input TIFFs Directory', 'id': 'select_input_tifs_dir', 'data': None})
-             if not shp:
-                 actions.append({'text': 'Select Shapefile', 'id': 'select_file_shapefile', 'data': 'shapefile'})
-             if not mask:
-                 actions.append({'text': 'Select Template Mask', 'id': 'select_file_template_mask', 'data': 'template_mask'})
+        # Logic: If all inputs ready
+        if basin_name and input_tifs and shp and mask:
+            if not nc_files_exist:
+                self.append_chat_message('bot', "All inputs for NetCDF creation are ready. Shall we start?")
+                actions.append({'text': 'Start NetCDF Creation', 'id': 'run_task_netcdf', 'data': None})
+            else:
+                self.append_chat_message('bot', "NetCDF files are ready. You can proceed to Rain Interception or re-create NetCDFs.")
+                actions.append({'text': 'Run Rain Interception', 'id': 'run_task_rain', 'data': None})
+                actions.append({'text': 'Re-create NetCDFs', 'id': 'run_task_netcdf', 'data': None})
 
-             self.show_actions(actions)
-             self.chat_state = 'MISSING_INPUTS'
-             return
+                # Check for Hydroloop
+                hydro_missing = []
+                for k in ['dem_path', 'population_path', 'aeisw_path', 'wpl_path']:
+                    if k not in found:
+                        hydro_missing.append(k)
 
-        # Scenario: Inputs Ready, NetCDF not created
-        if not nc_files_exist:
-            self.append_chat_message('bot', "I found all necessary inputs. We can start by creating the NetCDF files.")
-            actions.append({'text': 'Create NetCDF Files', 'id': 'run_task_netcdf', 'data': None})
-            self.show_actions(actions)
-            self.chat_state = 'READY_NETCDF'
-            return
-
-        # Scenario: NetCDFs Exist
-        self.append_chat_message('bot', "I found existing NetCDF files in the NetCDF directory.")
-
-        actions.append({'text': 'Run Rain Interception', 'id': 'run_task_rain', 'data': None})
-        actions.append({'text': 'Re-create NetCDF', 'id': 'run_task_netcdf', 'data': None})
-
-        # Check for Hydroloop inputs
-        hydro_missing = [k for k in ['dem_path', 'population_path'] if k not in found]
-        if not hydro_missing:
-             actions.append({'text': 'Run Full Hydroloop', 'id': 'run_task_hydroloop', 'data': None})
-        else:
-             self.append_chat_message('bot', "To run Hydroloop, I need additional files like DEM and Population.")
-             for key in hydro_missing:
-                 actions.append({'text': f'Select {key.replace("_", " ").title()}', 'id': f'select_file_{key}', 'data': key})
+                if hydro_missing:
+                    # actions.append({'text': 'Prepare Hydroloop Inputs', 'id': 'scan_workspace', 'data': None})
+                    # Just show missing files actions
+                    for k in hydro_missing:
+                         actions.append({'text': f'Select {k.replace("_", " ").title()}', 'id': f'select_file_{k}', 'data': k})
+                else:
+                    actions.append({'text': 'Run Hydroloop', 'id': 'run_task_hydroloop', 'data': None})
 
         self.show_actions(actions)
-        self.chat_state = 'READY_NEXT'
+        self.chat_state = 'READY'
 
     def resource_path(self, relative_path):
         """Get absolute path to resource, works for dev and for PyInstaller"""
