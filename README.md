@@ -11,6 +11,7 @@ The Water Accounting Analysis Tool is a comprehensive desktop application design
 *   **Sheet Generation**: Automatically generates Water Accounting Sheet 1 and Sheet 2 in CSV and PDF formats.
 *   **Workflow Management**: Supports a full end-to-end workflow or individual module execution.
 *   **Progress Tracking**: Real-time logging and progress bars for long-running tasks.
+*   **AI Integration**: Integrated smart assistant using local LLM models (.gguf) for directory scanning and data quality analysis.
 
 ## Requirements
 
@@ -22,6 +23,7 @@ The application is built using Python 3 and relies on several scientific and geo
 *   **Data Analysis**: `numpy`, `pandas`, `xarray`, `netCDF4`, `scipy`, `dask`, `distributed`, `h5netcdf`
 *   **Visualization/Reporting**: `matplotlib`, `cairosvg`, `svglib`, `reportlab`
 *   **Others**: `pyshp` (shapefile), `pillow`, `tqdm`
+*   **AI**: `llama-cpp-python` (optional, for AI features)
 
 ## Installation
 
@@ -31,7 +33,7 @@ It is recommended to use **Conda** to manage the environment, especially for geo
 conda create -n wa_tool python=3.9
 conda activate wa_tool
 conda install -c conda-forge gdal rasterio fiona shapely xarray netcdf4 dask distributed numpy pandas scipy matplotlib pyqt
-pip install simpledbf svglib reportlab cairosvg geopy pyshp
+pip install simpledbf svglib reportlab cairosvg geopy pyshp llama-cpp-python
 ```
 
 *Note: You may need to ensure `gdal-data` and `proj-data` are correctly set up in your environment variables if not handled automatically.*
@@ -64,6 +66,15 @@ The application can be packaged into a standalone executable using `PyInstaller`
     pyinstaller --noconfirm --clean WaterAccountingTool.spec
     ```
 3.  The executable will be generated in the `dist/WaterAccountingTool` directory.
+
+## AI Assistant Integration
+
+The tool now supports a local AI assistant to help identify valid input directories and analyze dataset quality.
+
+1.  **Download Model**: Acquire a GGUF format model (e.g., Llama 2, Mistral).
+2.  **Usage**:
+    *   **Manual**: Use the "Browse" button in the "Select Analysis Module" page to select your `.gguf` file.
+    *   **Automatic**: Rename your model file to `wa_model.gguf` and place it in the `resources/` directory. The application will detect and load it automatically upon launch.
 
 ## Directory Structure
 

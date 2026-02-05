@@ -16,6 +16,7 @@ try:
 except ImportError:
     from app_backend import Backend
 from ui_pages import UIPages
+from ai_assistant import AIHandler
 from collections import defaultdict
 
 
@@ -65,6 +66,7 @@ class MainWindow(QMainWindow, UIPages):
         self.setWindowTitle("Water Accounting Analysis Tool")
         self.setGeometry(100, 100, 1200, 800)
         self.backend = Backend()
+        self.ai_handler = AIHandler()
         self.basin_name_entry = None
         self.selected_basin_name = ""
         self._syncing_basin_name = False

@@ -368,6 +368,47 @@ class UIPages:
             if hasattr(self, 'rain_input'):
                 self.rain_input.setText(netcdf_path)
             
+            # Smart Scan / AI
+            if hasattr(self, 'ai_handler'):
+                # Perform deep scan of workspace for all file types
+                scan_result = self.ai_handler.scan_workspace(path)
+                found_map = scan_result.get('found', {})
+
+                # Auto-populate all known fields across all pages
+                # Helper to safely set text if key exists
+                def safe_set(entries, key, value):
+                    if entries and key in entries:
+                        entries[key].setText(value)
+
+                # 1. NetCDF / Full Inputs (Input Tifs)
+                if 'input_tifs' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'input_tifs', found_map['input_tifs'])
+                    safe_set(getattr(self, 'full_entries', {}), 'input_tifs', found_map['input_tifs'])
+
+                # 2. Shapefile & Templates
+                if 'shapefile' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'shapefile', found_map['shapefile'])
+                    safe_set(getattr(self, 'full_entries', {}), 'shapefile', found_map['shapefile'])
+
+                if 'template_mask' in found_map:
+                    safe_set(getattr(self, 'netcdf_entries', {}), 'template_mask', found_map['template_mask'])
+                    safe_set(getattr(self, 'full_entries', {}), 'template_mask', found_map['template_mask'])
+                    safe_set(getattr(self, 'hydro_entries', {}), 'template_mask', found_map['template_mask'])
+
+                # 3. Hydroloop Files
+                hydro_keys = ['dem_path', 'aeisw_path', 'population_path', 'wpl_path',
+                              'ewr_path', 'inflow', 'outflow', 'tww', 'cw_do']
+                for hk in hydro_keys:
+                    if hk in found_map:
+                        safe_set(getattr(self, 'full_entries', {}), hk, found_map[hk])
+                        safe_set(getattr(self, 'hydro_entries', {}), hk, found_map[hk])
+
+                # Generate AI message summarizing the full scan
+                msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
+
+                # Show message
+                QMessageBox.information(self, "AI Assistant", msg)
+
     def browse_file(self, key, entries, file_filter):
         path, _ = QFileDialog.getOpenFileName(self, "Select File", "", file_filter)
         if path:
@@ -707,6 +748,14 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         work_dir_row.addWidget(browse_work_btn)
         content_layout.addLayout(work_dir_row)
 
+        # Auto-detect default model in resources (Hidden from user as per request)
+        default_model_path = self.resource_path(os.path.join("resources", "wa_model.gguf"))
+        if os.path.exists(default_model_path):
+            if hasattr(self, 'ai_handler'):
+                success, msg = self.ai_handler.load_model(default_model_path)
+                if not success:
+                    print(f"Failed to auto-load default model: {msg}")
+
         basin_row = QHBoxLayout()
         basin_row.addWidget(QLabel("Basin Name:"))
         if getattr(self, 'basin_name_entry', None) is None:
@@ -930,6 +979,11 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         self.full_tiff_count.setObjectName("infoPanel")
         self.full_tiff_count.setWordWrap(True)
         netcdf_layout.addWidget(self.full_tiff_count)
+
+        analyze_btn_full = QPushButton("Analyze Data with AI")
+        analyze_btn_full.setObjectName("secondaryButton")
+        analyze_btn_full.clicked.connect(lambda: self.run_ai_analysis("full"))
+        netcdf_layout.addWidget(analyze_btn_full, alignment=Qt.AlignLeft)
 
         content_layout.addWidget(netcdf_card)
 
@@ -1187,6 +1241,11 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         self.netcdf_tiff_count.setObjectName("infoPanel")
         self.netcdf_tiff_count.setWordWrap(True)
         netcdf_layout.addWidget(self.netcdf_tiff_count)
+
+        analyze_btn = QPushButton("Analyze Data with AI")
+        analyze_btn.setObjectName("secondaryButton")
+        analyze_btn.clicked.connect(lambda: self.run_ai_analysis("netcdf"))
+        netcdf_layout.addWidget(analyze_btn, alignment=Qt.AlignLeft)
 
         content_layout.addWidget(netcdf_card)
 
@@ -1896,3 +1955,40 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             self.full_entries["unit_conversion"].setText("1e3") if hasattr(self, 'full_entries') else self.hydro_entries["unit_conversion"].setText("1e3")
         else:
             self.full_entries["unit_conversion"].setText("1e6") if hasattr(self, 'full_entries') else self.hydro_entries["unit_conversion"].setText("1e6")
+
+    def browse_ai_model(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select AI Model", "", "GGUF Files (*.gguf);;All Files (*)")
+        if path:
+            self.ai_model_entry.setText(path)
+            # Try to load it
+            if hasattr(self, 'ai_handler'):
+                success, msg = self.ai_handler.load_model(path)
+                QMessageBox.information(self, "AI Model Status", msg)
+            else:
+                QMessageBox.warning(self, "Error", "AI Handler not initialized.")
+
+    def run_ai_analysis(self, page_source):
+        if not hasattr(self, 'ai_handler'):
+             QMessageBox.warning(self, "Error", "AI Handler not initialized.")
+             return
+
+        if page_source == "netcdf":
+            input_dir = self.netcdf_entries.get("input_tifs", QLineEdit()).text()
+        elif page_source == "full":
+            input_dir = self.full_entries.get("input_tifs", QLineEdit()).text()
+        else:
+            return
+
+        if not input_dir:
+            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
+            return
+
+        analysis = self.ai_handler.analyze_dataset_quality(input_dir)
+        response = self.ai_handler.generate_ai_response(analysis, prompt_type="data_analysis")
+
+        # Show in a dialog
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("AI Data Analysis")
+        dlg.setText(response)
+        dlg.setStandardButtons(QMessageBox.Ok)
+        dlg.exec_()
