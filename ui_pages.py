@@ -671,7 +671,7 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         # Start Analysis button
         start_btn = QPushButton("Start Analysis")
         start_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
-        start_btn.setMinimumSize(300, 100)
+        start_btn.setMinimumSize(250, 100)
         start_btn.setStyleSheet("""
             QPushButton {
                 background-color: #66BB6A;
@@ -687,10 +687,29 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         """)
         start_btn.setCursor(Qt.PointingHandCursor)
 
+        # AI Assistant button
+        ai_btn = QPushButton("AI Assistant")
+        ai_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(8))
+        ai_btn.setMinimumSize(250, 100)
+        ai_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7E57C2;
+                color: white;
+                font-size: 22px;
+                font-weight: bold;
+                padding: 15px 20px;
+                border-radius: 35px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #673AB7; }
+            QPushButton:pressed { background-color: #512DA8; }
+        """)
+        ai_btn.setCursor(Qt.PointingHandCursor)
 
         # Add buttons to layout
         button_layout.addWidget(info_btn)
         button_layout.addWidget(start_btn)
+        button_layout.addWidget(ai_btn)
         button_container.setLayout(button_layout)
 
         content_layout.addWidget(button_container, alignment=Qt.AlignCenter)
@@ -1992,3 +2011,151 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         dlg.setText(response)
         dlg.setStandardButtons(QMessageBox.Ok)
         dlg.exec_()
+
+    def create_chat_page(self):
+        """Create the AI Chat Interface page"""
+        page = QWidget()
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        # Header
+        main_layout.addWidget(self.create_header("AI Assistant"))
+
+        # Back button
+        back_btn = QPushButton("Back")
+        back_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        back_btn.setFixedSize(100, 40)
+        back_btn.setStyleSheet("""
+            QPushButton {
+                background-color: white;
+                color: #EF5350;
+                border-radius: 5px;
+                border: 1px solid #EF5350;
+            }
+            QPushButton:hover {
+                background-color: #FFEBEE;
+            }
+        """)
+        back_btn.setCursor(Qt.PointingHandCursor)
+        main_layout.addWidget(back_btn, alignment=Qt.AlignLeft)
+
+        # Chat Area
+        self.chat_scroll = QScrollArea()
+        self.chat_scroll.setWidgetResizable(True)
+        self.chat_scroll.setStyleSheet("background-color: white; border-radius: 10px; border: 1px solid #E0E0E0;")
+
+        self.chat_content = QWidget()
+        self.chat_layout = QVBoxLayout()
+        self.chat_layout.setSpacing(15)
+        self.chat_layout.setContentsMargins(20, 20, 20, 20)
+        self.chat_layout.addStretch() # Push messages to bottom
+        self.chat_content.setLayout(self.chat_layout)
+
+        self.chat_scroll.setWidget(self.chat_content)
+        main_layout.addWidget(self.chat_scroll)
+
+        # Actions Area
+        self.actions_container = QWidget()
+        self.actions_layout = QHBoxLayout() # Or FlowLayout if available, but HBox is fine for now
+        self.actions_layout.setSpacing(10)
+        self.actions_layout.setContentsMargins(0, 10, 0, 10)
+        self.actions_container.setLayout(self.actions_layout)
+        main_layout.addWidget(self.actions_container)
+
+        # Input Area
+        input_container = QWidget()
+        input_layout = QHBoxLayout()
+        input_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.chat_input = QLineEdit()
+        self.chat_input.setPlaceholderText("Type a command or message...")
+        self.chat_input.returnPressed.connect(self.handle_user_input)
+        self.chat_input.setFixedHeight(50)
+
+        send_btn = QPushButton("Send")
+        send_btn.clicked.connect(self.handle_user_input)
+        send_btn.setFixedSize(80, 50)
+        send_btn.setObjectName("primaryActionButton")
+
+        input_layout.addWidget(self.chat_input)
+        input_layout.addWidget(send_btn)
+        input_container.setLayout(input_layout)
+        main_layout.addWidget(input_container)
+
+        page.setLayout(main_layout)
+        self.stacked_widget.addWidget(page)
+
+    def append_chat_message(self, sender, text):
+        """Add a message bubble to the chat"""
+        msg_label = QLabel(text)
+        msg_label.setWordWrap(True)
+        msg_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        container = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        if sender == "user":
+            msg_label.setStyleSheet("""
+                background-color: #DCF8C6;
+                color: black;
+                padding: 12px;
+                border-radius: 15px;
+                border-bottom-right-radius: 2px;
+                font-size: 14px;
+            """)
+            layout.addStretch()
+            layout.addWidget(msg_label)
+        else:
+            msg_label.setStyleSheet("""
+                background-color: #F0F2F5;
+                color: black;
+                padding: 12px;
+                border-radius: 15px;
+                border-bottom-left-radius: 2px;
+                font-size: 14px;
+            """)
+            layout.addWidget(msg_label)
+            layout.addStretch()
+
+        container.setLayout(layout)
+
+        # Add to layout before the stretch
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, container)
+
+        # Scroll to bottom
+        self.chat_scroll.verticalScrollBar().setValue(self.chat_scroll.verticalScrollBar().maximum())
+
+    def clear_actions(self):
+        """Remove all action buttons"""
+        while self.actions_layout.count():
+            item = self.actions_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def show_actions(self, actions):
+        """
+        Display a list of action buttons.
+        actions: list of dict {'text': str, 'id': str, 'data': any}
+        """
+        self.clear_actions()
+        for action in actions:
+            btn = QPushButton(action['text'])
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #E3F2FD;
+                    color: #1565C0;
+                    border: 1px solid #90CAF9;
+                    border-radius: 15px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #BBDEFB;
+                }
+            """)
+            # Use closure to capture action data
+            btn.clicked.connect(lambda checked, a=action: self.handle_chat_action(a['id'], a.get('data')))
+            self.actions_layout.addWidget(btn)
+        self.actions_layout.addStretch()
