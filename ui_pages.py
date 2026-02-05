@@ -368,6 +368,30 @@ class UIPages:
             if hasattr(self, 'rain_input'):
                 self.rain_input.setText(netcdf_path)
             
+            # Smart Scan / AI
+            if hasattr(self, 'ai_handler'):
+                scan_result = self.ai_handler.scan_directory_heuristics(path)
+                found_input = scan_result.get('found_input_dir')
+
+                if found_input:
+                    # Auto-populate input directories
+                    if hasattr(self, 'netcdf_entries'):
+                        self.netcdf_entries['input_tifs'].setText(found_input)
+                    if hasattr(self, 'full_entries'):
+                        self.full_entries['input_tifs'].setText(found_input)
+
+                    # Generate AI message
+                    msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
+
+                    # Show message
+                    QMessageBox.information(self, "AI Assistant", msg)
+                else:
+                    # Inform user about findings (or lack thereof)
+                    msg = self.ai_handler.generate_ai_response(scan_result, prompt_type="directory_scan")
+                    # Only show if explicit AI is loaded or if we want to guide the user regardless
+                    # The heuristic message is useful even without AI model
+                    QMessageBox.information(self, "AI Assistant", msg)
+
     def browse_file(self, key, entries, file_filter):
         path, _ = QFileDialog.getOpenFileName(self, "Select File", "", file_filter)
         if path:
@@ -707,6 +731,20 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         work_dir_row.addWidget(browse_work_btn)
         content_layout.addLayout(work_dir_row)
 
+        # AI Model Selection
+        ai_row = QHBoxLayout()
+        ai_row.addWidget(QLabel("AI Model (.gguf):"))
+        self.ai_model_entry = QLineEdit()
+        self.ai_model_entry.setPlaceholderText("Select .gguf model file for AI features")
+        ai_row.addWidget(self.ai_model_entry)
+
+        browse_ai_btn = QPushButton("Browse")
+        browse_ai_btn.clicked.connect(self.browse_ai_model)
+        browse_ai_btn.setCursor(Qt.PointingHandCursor)
+        ai_row.addWidget(browse_ai_btn)
+
+        content_layout.addLayout(ai_row)
+
         basin_row = QHBoxLayout()
         basin_row.addWidget(QLabel("Basin Name:"))
         if getattr(self, 'basin_name_entry', None) is None:
@@ -930,6 +968,11 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         self.full_tiff_count.setObjectName("infoPanel")
         self.full_tiff_count.setWordWrap(True)
         netcdf_layout.addWidget(self.full_tiff_count)
+
+        analyze_btn_full = QPushButton("Analyze Data with AI")
+        analyze_btn_full.setObjectName("secondaryButton")
+        analyze_btn_full.clicked.connect(lambda: self.run_ai_analysis("full"))
+        netcdf_layout.addWidget(analyze_btn_full, alignment=Qt.AlignLeft)
 
         content_layout.addWidget(netcdf_card)
 
@@ -1187,6 +1230,11 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         self.netcdf_tiff_count.setObjectName("infoPanel")
         self.netcdf_tiff_count.setWordWrap(True)
         netcdf_layout.addWidget(self.netcdf_tiff_count)
+
+        analyze_btn = QPushButton("Analyze Data with AI")
+        analyze_btn.setObjectName("secondaryButton")
+        analyze_btn.clicked.connect(lambda: self.run_ai_analysis("netcdf"))
+        netcdf_layout.addWidget(analyze_btn, alignment=Qt.AlignLeft)
 
         content_layout.addWidget(netcdf_card)
 
@@ -1896,3 +1944,40 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
             self.full_entries["unit_conversion"].setText("1e3") if hasattr(self, 'full_entries') else self.hydro_entries["unit_conversion"].setText("1e3")
         else:
             self.full_entries["unit_conversion"].setText("1e6") if hasattr(self, 'full_entries') else self.hydro_entries["unit_conversion"].setText("1e6")
+
+    def browse_ai_model(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select AI Model", "", "GGUF Files (*.gguf);;All Files (*)")
+        if path:
+            self.ai_model_entry.setText(path)
+            # Try to load it
+            if hasattr(self, 'ai_handler'):
+                success, msg = self.ai_handler.load_model(path)
+                QMessageBox.information(self, "AI Model Status", msg)
+            else:
+                QMessageBox.warning(self, "Error", "AI Handler not initialized.")
+
+    def run_ai_analysis(self, page_source):
+        if not hasattr(self, 'ai_handler'):
+             QMessageBox.warning(self, "Error", "AI Handler not initialized.")
+             return
+
+        if page_source == "netcdf":
+            input_dir = self.netcdf_entries.get("input_tifs", QLineEdit()).text()
+        elif page_source == "full":
+            input_dir = self.full_entries.get("input_tifs", QLineEdit()).text()
+        else:
+            return
+
+        if not input_dir:
+            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
+            return
+
+        analysis = self.ai_handler.analyze_dataset_quality(input_dir)
+        response = self.ai_handler.generate_ai_response(analysis, prompt_type="data_analysis")
+
+        # Show in a dialog
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("AI Data Analysis")
+        dlg.setText(response)
+        dlg.setStandardButtons(QMessageBox.Ok)
+        dlg.exec_()
