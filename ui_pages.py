@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QLabel, QLineEdit, QPushButton, QTextEdit, QProgressBar,
-                             QComboBox, QHBoxLayout, QVBoxLayout, QWidget,
+                             QComboBox, QHBoxLayout, QVBoxLayout, QWidget, QApplication,
                              QSizePolicy, QScrollArea, QFrame, QStackedLayout, QMessageBox, QFileDialog)
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QFont, QIcon
@@ -2110,44 +2110,77 @@ This structure and naming scheme follows IWMI’s WA+ framework documentation an
         self.stacked_widget.addWidget(page)
 
     def append_chat_message(self, sender, text):
-        """Add a message bubble to the chat"""
-        msg_label = QLabel(text)
-        msg_label.setWordWrap(True)
-        msg_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-
+        """Add a message bubble to the chat, handling images if present"""
         container = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 
-        if sender == "user":
-            msg_label.setStyleSheet("""
-                background-color: #DCF8C6;
-                color: black;
-                padding: 12px;
-                border-radius: 15px;
-                border-bottom-right-radius: 2px;
-                font-size: 14px;
-            """)
-            layout.addStretch()
-            layout.addWidget(msg_label)
-        else:
-            msg_label.setStyleSheet("""
-                background-color: #F0F2F5;
-                color: black;
-                padding: 12px;
-                border-radius: 15px;
-                border-bottom-left-radius: 2px;
-                font-size: 14px;
-            """)
-            layout.addWidget(msg_label)
-            layout.addStretch()
+        # Check for image tag [IMAGE: path]
+        image_path = None
+        if "[IMAGE:" in text:
+            import re
+            match = re.search(r'\[IMAGE:\s*(.*?)\]', text)
+            if match:
+                image_path = match.group(1)
+                text = text.replace(match.group(0), "").strip()
+
+        # Text Message
+        if text:
+            msg_label = QLabel(text)
+            msg_label.setWordWrap(True)
+            msg_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+            if sender == "user":
+                msg_label.setStyleSheet("""
+                    background-color: #DCF8C6;
+                    color: black;
+                    padding: 12px;
+                    border-radius: 15px;
+                    border-bottom-right-radius: 2px;
+                    font-size: 14px;
+                """)
+                layout.addStretch()
+                layout.addWidget(msg_label)
+            else:
+                msg_label.setStyleSheet("""
+                    background-color: #F0F2F5;
+                    color: black;
+                    padding: 12px;
+                    border-radius: 15px;
+                    border-bottom-left-radius: 2px;
+                    font-size: 14px;
+                """)
+                layout.addWidget(msg_label)
+                layout.addStretch()
 
         container.setLayout(layout)
-
-        # Add to layout before the stretch
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, container)
 
+        # Image Message (if any)
+        if image_path and os.path.exists(image_path):
+            img_container = QWidget()
+            img_layout = QHBoxLayout()
+            img_layout.setContentsMargins(0, 5, 0, 5)
+
+            img_label = QLabel()
+            pixmap = QPixmap(image_path)
+            # Scale if too large
+            if pixmap.width() > 600:
+                pixmap = pixmap.scaledToWidth(600, Qt.SmoothTransformation)
+            img_label.setPixmap(pixmap)
+
+            if sender == "user":
+                img_layout.addStretch()
+                img_layout.addWidget(img_label)
+            else:
+                img_layout.addWidget(img_label)
+                img_layout.addStretch()
+
+            img_container.setLayout(img_layout)
+            self.chat_layout.insertWidget(self.chat_layout.count() - 1, img_container)
+
         # Scroll to bottom
+        QApplication.processEvents() # Force update
         self.chat_scroll.verticalScrollBar().setValue(self.chat_scroll.verticalScrollBar().maximum())
 
     def clear_actions(self):

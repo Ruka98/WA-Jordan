@@ -3,6 +3,22 @@ import glob
 import logging
 import sys
 import fnmatch
+import re
+import datetime
+import tempfile
+import numpy as np
+
+# Data analysis imports
+try:
+    import pandas as pd
+    import matplotlib
+    matplotlib.use('Agg') # Non-interactive backend
+    import matplotlib.pyplot as plt
+    import rasterio
+except ImportError:
+    pd = None
+    plt = None
+    rasterio = None
 
 # Try to import llama_cpp, handle if missing
 try:
@@ -317,35 +333,193 @@ class AIHandler:
             self.logger.error(f"LLM Error: {e}")
             return response_text + " (AI generation failed)"
 
+    def get_time_series_from_tiffs(self, directory):
+        """
+        Scan a directory of TIFFs, parse dates, calculate means, and return a DataFrame.
+        """
+        if not rasterio or not pd:
+            return None, "Required libraries (rasterio, pandas) are missing."
+
+        if not os.path.exists(directory):
+            return None, f"Directory not found: {directory}"
+
+        files = glob.glob(os.path.join(directory, "*.tif"))
+        files += glob.glob(os.path.join(directory, "*.tiff"))
+
+        if not files:
+            return None, "No TIFF files found in directory."
+
+        data = []
+        dates = []
+
+        # Limit files to prevent freezing
+        if len(files) > 100:
+            # Sample evenly
+            indices = np.linspace(0, len(files)-1, 100, dtype=int)
+            files = [files[i] for i in indices]
+
+        # Heuristic for date parsing: look for YYYYMMDD or YYYYMM or YYYY.MM.DD
+        # Prioritize patterns
+        patterns = [
+            r"(\d{4})(\d{2})(\d{2})", # YYYYMMDD
+            r"(\d{4})\.(\d{2})\.(\d{2})", # YYYY.MM.DD
+            r"(\d{4})-(\d{2})-(\d{2})", # YYYY-MM-DD
+            r"(\d{4})(\d{2})" # YYYYMM
+        ]
+
+        for f in sorted(files):
+            fname = os.path.basename(f)
+            dt = None
+            for pat in patterns:
+                match = re.search(pat, fname)
+                if match:
+                    parts = [int(g) for g in match.groups()]
+                    try:
+                        if len(parts) == 3:
+                            dt = datetime.datetime(parts[0], parts[1], parts[2])
+                        elif len(parts) == 2:
+                            dt = datetime.datetime(parts[0], parts[1], 1)
+                        break
+                    except ValueError:
+                        continue
+
+            if dt:
+                try:
+                    with rasterio.open(f) as src:
+                        # Read first band
+                        arr = src.read(1, masked=True)
+                        # Compute mean, ignoring nodata (masked)
+                        mean_val = np.nanmean(arr)
+                        # Handle case where everything is masked
+                        if np.ma.is_masked(mean_val):
+                             if mean_val.mask:
+                                 mean_val = np.nan
+                             else:
+                                 mean_val = float(mean_val)
+
+                        dates.append(dt)
+                        data.append(mean_val)
+                except Exception as e:
+                    self.logger.error(f"Error reading {f}: {e}")
+
+        if not data:
+            return None, "Could not extract data from files (check date formats)."
+
+        df = pd.DataFrame({'Date': dates, 'Mean': data})
+        df = df.sort_values('Date')
+        return df, "Success"
+
+    def plot_data(self, df, title, ylabel):
+        """
+        Generate a plot from DataFrame and return the path to the image.
+        """
+        if not plt:
+            return None, "Matplotlib is missing."
+
+        try:
+            plt.figure(figsize=(10, 5))
+            plt.plot(df['Date'], df['Mean'], marker='o', linestyle='-')
+            plt.title(title)
+            plt.xlabel('Date')
+            plt.ylabel(ylabel)
+            plt.grid(True)
+            plt.tight_layout()
+
+            # Save to temporary file
+            fd, path = tempfile.mkstemp(suffix='.png')
+            os.close(fd)
+            plt.savefig(path)
+            plt.close()
+            return path, "Success"
+        except Exception as e:
+            self.logger.error(f"Plotting error: {e}")
+            return None, str(e)
+
     def chat(self, user_message, context_info=None):
         """
         Handle conversational chat with the user, incorporating tool context.
         """
         if not self.is_loaded():
-            return "I am running in limited mode because the AI model is not loaded. I can still help you with basic commands like 'select directory' or 'run netcdf', but I can't generate creative responses."
+            return "I am running in limited mode because the AI model is not loaded. I can still help check data if you ask 'check data' or 'plot precipitation', but conversational abilities are limited."
 
         if context_info is None:
             context_info = {}
 
-        # Construct System Prompt with Tool Knowledge
-        system_prompt = """You are Jules, an intelligent AI assistant for the Water Accounting Plus (WA+) Tool.
-Your goal is to help users run hydrological analysis workflows.
+        # 1. Check for Analysis Intents via Regex/Keywords
+        msg_lower = user_message.lower()
+        intent_analysis = any(x in msg_lower for x in ['plot', 'graph', 'trend', 'show me'])
 
-The tool has the following workflow:
-1. Create NetCDF: Converts input TIFFs (P, ET, LAI, etc.) into NetCDF format.
-2. Rain Interception: Calculates interception and separates Green/Blue water.
-3. Soil Moisture Balance: Calculates soil moisture, percolation, and runoff.
-4. Hydroloop: Allocates water to different users.
-5. Generate Sheets: Creates the final WA+ reporting sheets.
+        if intent_analysis:
+            # Try to identify variable
+            # Map common names to config keys
+            var_map = {
+                'precipitation': 'P', 'rain': 'P', 'rainfall': 'P',
+                'evapotranspiration': 'ET', 'et': 'ET', 'eta': 'ET',
+                'lai': 'LAI', 'leaf area': 'LAI',
+                'soil moisture': 'SMsat', 'theta': 'SMsat',
+                'ndm': 'ProbaV', 'biomass': 'ProbaV',
+                'aridity': 'Ari'
+            }
+
+            target_var = None
+            for key, val in var_map.items():
+                if key in msg_lower:
+                    target_var = val
+                    break
+
+            # If no mapping found, check direct config keys (case insensitive)
+            if not target_var:
+                for key in dataset_config.keys():
+                    if key.lower() in msg_lower:
+                        target_var = key
+                        break
+
+            if target_var:
+                # Find the path
+                found_files = context_info.get('found_files', {})
+                # 'input_tifs' usually points to the root input dir.
+                # We need to append the subdirectory from config.
+
+                base_dir = found_files.get('input_tifs')
+                if base_dir:
+                    subdir = dataset_config.get(target_var, {}).get('subdir')
+                    if subdir:
+                        full_path = os.path.join(base_dir, subdir)
+
+                        # Generate Plot
+                        df, msg = self.get_time_series_from_tiffs(full_path)
+                        if df is not None and not df.empty:
+                            unit = dataset_config.get(target_var, {}).get('attrs', {}).get('units', 'Value')
+                            display_name = f"{target_var} Trend"
+                            img_path, plt_msg = self.plot_data(df, display_name, unit)
+
+                            if img_path:
+                                return f"Here is the trend for {target_var} based on the input files in '{subdir}'.\n[IMAGE: {img_path}]"
+                            else:
+                                return f"I could read the data but failed to generate the plot: {plt_msg}"
+                        else:
+                            return f"I tried to analyze {target_var} in '{full_path}' but couldn't extract time series data. {msg}"
+                    else:
+                        return f"Configuration for {target_var} is missing subdirectory info."
+                else:
+                    return "I know you want to plot data, but I haven't found the input directory yet. Please select the Working Directory first."
+
+        # 2. General LLM Chat
+        # Construct System Prompt with Data Analyst Persona
+        system_prompt = """You are Jules, a Data Analysis Assistant for the Water Accounting Plus (WA+) Tool.
+Your goal is to help users inspect their input data and understand the files.
+
+Capabilities:
+- You can plot trends if the user asks (e.g., "plot precipitation").
+- You can explain what files are needed (P, ET, LAI, etc.).
 
 Code Structure:
-- Input data should be in a working directory with specific subfolders (P, ET, etc.).
-- 'main_app.py' is the main entry point.
-- 'ai_assistant.py' handles this logic.
+- Input data is stored in TIFF files in specific subfolders.
+- 'main_app.py' controls the application.
 
 Instructions:
-- If the user asks to "create blue ET" or "green ET", explain that this happens during the 'Rain Interception' and 'Soil Moisture Balance' steps, and suggest running those.
-- If the user wants to "edit" or "change" a file, suggest they say "change shapefile" or "select shapefile".
+- If asked about specific data, encourage the user to ask for a plot or check.
+- Do NOT suggest running workflows like 'hydroloop' or 'netcdf creation' anymore; focus on data inspection.
 - Be concise, professional, and helpful.
 """
 
